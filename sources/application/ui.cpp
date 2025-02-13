@@ -129,8 +129,8 @@ static void show_characters(Scene &scene)
 
       // vizualize skeleton
       ImDrawList* drawList = ImGui::GetWindowDrawList();
-      // nice dark green semi-transparent color
-      const auto greenColor = IM_COL32(0, 200, 0, 128);
+      // nice golden semi-transparent color
+      const auto color = IM_COL32(255, 215, 0, 128);
       for (size_t j = 0; j < character.skeleton.names.size(); j++)
       {
         const glm::mat4 &transform = character.skeleton.worldTransform[j];
@@ -142,7 +142,7 @@ static void show_characters(Scene &scene)
           const glm::vec3 &to = glm::vec3(transform[3]);
           const glm::vec2 fromScreen = world_to_screen(scene.userCamera, from);
           const glm::vec2 toScreen = world_to_screen(scene.userCamera, to);
-          drawList->AddLine(ImVec2(fromScreen.x, fromScreen.y), ImVec2(toScreen.x, toScreen.y), greenColor, 2.f);
+          drawList->AddLine(ImVec2(fromScreen.x, fromScreen.y), ImVec2(toScreen.x, toScreen.y), color, 2.f);
         }
       }
       ImGui::End();
