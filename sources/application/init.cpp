@@ -44,30 +44,42 @@ void application_init(Scene &scene)
 
   ModelAsset motusMan = load_model("resources/MotusMan_v55/MotusMan_v55.fbx");
   ModelAsset ruby = load_model("resources/sketchfab/ruby.fbx");
+  ModelAsset MOB1_Walk_F_Loop_IPC = load_model("resources/Animations/IPC/MOB1_Walk_F_Loop_IPC.fbx");
 
-  scene.characters.emplace_back(Character{
-    "MotusMan_v55",
-    glm::identity<glm::mat4>(),
-    motusMan.meshes,
-    std::move(material),
-    SkeletonRuntime(motusMan.skeleton)
-  });
+  {
+    Character character;
+    character.name = "MotusMan_v55";
+    character.transform = glm::identity<glm::mat4>();
+    character.meshes = motusMan.meshes;
+    character.material = std::move(material);
+    character.skeletonInfo = SkeletonInfo(motusMan.skeleton);
+    character.animationContext.setup(MOB1_Walk_F_Loop_IPC.skeleton.skeleton.get());
+    character.animationContext.currentAnimation = MOB1_Walk_F_Loop_IPC.animations[0].get();
+    scene.characters.emplace_back(std::move(character));
+  }
 
   auto whiteMaterial = make_material("character", "sources/shaders/character_vs.glsl", "sources/shaders/character_ps.glsl");
 
   const uint8_t whiteColor[4] = {255, 255, 255, 255};
   whiteMaterial->set_property("mainTex", create_texture2d(whiteColor, 1, 1, 4));
 
-  scene.characters.emplace_back(Character{
-   "Ruby",
-    glm::translate(glm::identity<glm::mat4>(), glm::vec3(2.f, 0.f, 0.f)),
-    ruby.meshes,
-    std::move(whiteMaterial),
-    SkeletonRuntime(ruby.skeleton)
-  });
+
+  {
+    Character character;
+    character.name = "Ruby";
+    character.transform = glm::translate(glm::identity<glm::mat4>(), glm::vec3(2.f, 0.f, 0.f));
+    character.meshes = ruby.meshes;
+    character.material = std::move(whiteMaterial);
+    character.skeletonInfo = SkeletonInfo(ruby.skeleton);
+    character.animationContext.setup(ruby.skeleton.skeleton.get());
+    character.animationContext.currentAnimation = ruby.animations[0].get();
+    scene.characters.emplace_back(std::move(character));
+  }
+
 
   scene.models.push_back(std::move(motusMan));
   scene.models.push_back(std::move(ruby));
+  scene.models.push_back(std::move(MOB1_Walk_F_Loop_IPC));
 
   std::fflush(stdout);
 }

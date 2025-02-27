@@ -67,13 +67,13 @@ static void show_characters(Scene &scene)
         ImGui::Indent(INDENT);
         ImGui::Text("Meshes: %zu", character.meshes.size());
         // show skeleton
-        SkeletonRuntime &skeleton = character.skeleton;
-        ImGui::Text("Skeleton Nodes: %zu", skeleton.names.size());
-        for (size_t j = 0; j < skeleton.names.size(); j++)
+        SkeletonInfo &skeletonInfo = character.skeletonInfo;
+        ImGui::Text("Skeleton Nodes: %zu", skeletonInfo.names.size());
+        for (size_t j = 0; j < skeletonInfo.names.size(); j++)
         {
           // show text with tabs for hierarchy
-          const std::string &name = skeleton.names[j];
-          int depth = skeleton.hierarchyDepth[j];
+          const std::string &name = skeletonInfo.names[j];
+          int depth = skeletonInfo.hierarchyDepth[j];
           std::string tabs(depth, ' ');
           std::string label = tabs + name;
           if (ImGui::Selectable(label.c_str(), selectedNode == j))
@@ -88,11 +88,12 @@ static void show_characters(Scene &scene)
     if (selectedCharacter < scene.characters.size())
     {
       Character &character = scene.characters[selectedCharacter];
-      if (selectedNode < character.skeleton.names.size())
+      if (selectedNode < character.skeletonInfo.names.size())
       {
-        glm::mat4 transform = character.transform * character.skeleton.worldTransform[selectedNode];
+        glm::mat4 &worldTransform = reinterpret_cast<glm::mat4 &>(character.animationContext.worldTransforms[selectedNode]);
+        glm::mat4 transform = character.transform * worldTransform;
         manipulate_transform(transform, scene.userCamera);
-        character.skeleton.worldTransform[selectedNode] = inverse(character.transform) * transform;
+        worldTransform = inverse(character.transform) * transform;
       }
       else
       {
@@ -104,16 +105,7 @@ static void show_characters(Scene &scene)
   if (selectedCharacter < scene.characters.size())
   {
     Character &character = scene.characters[selectedCharacter];
-    if (selectedNode < character.skeleton.names.size())
-    {
-      glm::mat4 transform = character.transform * character.skeleton.worldTransform[selectedNode];
-      // manipulate_transform(transform, scene.userCamera);
-      character.skeleton.worldTransform[selectedNode] = inverse(character.transform) * transform;
-    }
-    else
-    {
-      // manipulate_transform(character.transform, scene.userCamera);
-    }
+
     {
       const ImU32 flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoBringToFrontOnFocus;
 
@@ -131,13 +123,13 @@ static void show_characters(Scene &scene)
       ImDrawList* drawList = ImGui::GetWindowDrawList();
       // nice golden semi-transparent color
       const auto color = IM_COL32(255, 215, 0, 128);
-      for (size_t j = 0; j < character.skeleton.names.size(); j++)
+      for (size_t j = 0; j < character.skeletonInfo.names.size(); j++)
       {
-        const glm::mat4 &transform = character.skeleton.worldTransform[j];
-        int parent = character.skeleton.parents[j];
+        const glm::mat4 &transform = reinterpret_cast<const glm::mat4 &>(character.animationContext.worldTransforms[j]);
+        int parent = character.skeletonInfo.parents[j];
         if (parent > 0)
         {
-          const glm::mat4 &parentTransform = character.skeleton.worldTransform[parent];
+          const glm::mat4 &parentTransform = reinterpret_cast<const glm::mat4 &>(character.animationContext.worldTransforms[parent]);
           const glm::vec3 &from = glm::vec3(parentTransform[3]);
           const glm::vec3 &to = glm::vec3(transform[3]);
           const glm::vec2 fromScreen = world_to_screen(scene.userCamera, from);
@@ -190,6 +182,7 @@ static void show_models(Scene &scene)
     static uint32_t selectedModel = -1u;
     for (size_t i = 0; i < scene.models.size(); i++)
     {
+      ImGui::PushID(i);
       const ModelAsset &model = scene.models[i];
       if (ImGui::Selectable(model.path.c_str(), selectedModel == i))
       {
@@ -200,10 +193,24 @@ static void show_models(Scene &scene)
         ImGui::Indent(15.0f);
         ImGui::Text("Path: %s", model.path.c_str());
         ImGui::Text("Meshes: %zu", model.meshes.size());
+
         for (size_t j = 0; j < model.meshes.size(); j++)
         {
+          ImGui::PushID(j);
           const MeshPtr &mesh = model.meshes[j];
           ImGui::Text("%s", mesh->name.c_str());
+          ImGui::Text("Bones: %zu", mesh->bonesNames.size());
+          if (ImGui::TreeNode("", "Bones: %zu", mesh->bonesNames.size()))
+          {
+            int boneIndex = 0;
+            for (const std::string &boneName : mesh->bonesNames)
+            {
+              ImGui::Text("%d) %s", boneIndex, boneName.c_str());
+              boneIndex++;
+            }
+            ImGui::TreePop();
+          }
+          ImGui::PopID();
         }
         // show skeleton
         const SkeletonOffline &skeleton = model.skeleton;
@@ -218,6 +225,7 @@ static void show_models(Scene &scene)
         }
         ImGui::Unindent(15.0f);
       }
+      ImGui::PopID();
     }
   }
   ImGui::End();
