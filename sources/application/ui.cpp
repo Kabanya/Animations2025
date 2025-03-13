@@ -63,6 +63,21 @@ static void show_characters(Scene &scene)
       }
       if (selectedCharacter == i)
       {
+        if (ImGui::SliderFloat("linearVelocity", &character.linearVelocity, 0.f, 3.f))
+        {
+          // update the parameter of the BlendSpace1D controller
+        }
+        const char *animationState[] = {
+          "Idle",
+          "Walk",
+        };
+        int currentState = (int)character.state;
+
+        if (ImGui::ListBox("AnimationState", &currentState, animationState, IM_ARRAYSIZE(animationState)))
+        {
+          character.state = (AnimationState)currentState;
+          // set the state of the AnimationGraph controller
+        }
         const float INDENT = 15.0f;
         ImGui::Indent(INDENT);
         ImGui::Text("Meshes: %zu", character.meshes.size());
