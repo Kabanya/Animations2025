@@ -1,3 +1,4 @@
+#version 400
 #shader bones
 
 layout(std140, binding = 0) uniform GlobalRenderData

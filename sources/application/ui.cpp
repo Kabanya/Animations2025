@@ -129,20 +129,153 @@ static void show_characters(Scene &scene)
 
       // vizualize skeleton
       ImDrawList* drawList = ImGui::GetWindowDrawList();
-      // nice dark green semi-transparent color
-      const auto greenColor = IM_COL32(0, 200, 0, 128);
+      // nice golden semi-transparent color for bones
+      const auto boneColor = IM_COL32(255, 215, 0, 175);
+      // directional indicator colors
+      const auto xAxisColor = IM_COL32(255, 0, 0, 200);    // Red for X axis
+      const auto yAxisColor = IM_COL32(0, 255, 0, 200);    // Green for Y axis
+      const auto zAxisColor = IM_COL32(0, 120, 255, 200);  // Blue for Z axis
+      
+      // Draw bones with directional indicators
       for (size_t j = 0; j < character.skeleton.names.size(); j++)
       {
-        const glm::mat4 &transform = character.skeleton.worldTransform[j];
+        const glm::mat4 &transform = character.transform * character.skeleton.worldTransform[j];
         int parent = character.skeleton.parents[j];
-        if (parent > 0)
+        if (parent >= 0) // from parent to child
         {
-          const glm::mat4 &parentTransform = character.skeleton.worldTransform[parent];
-          const glm::vec3 &from = glm::vec3(parentTransform[3]);
-          const glm::vec3 &to = glm::vec3(transform[3]);
-          const glm::vec2 fromScreen = world_to_screen(scene.userCamera, from);
-          const glm::vec2 toScreen = world_to_screen(scene.userCamera, to);
-          drawList->AddLine(ImVec2(fromScreen.x, fromScreen.y), ImVec2(toScreen.x, toScreen.y), greenColor, 2.f);
+          const glm::mat4 &parentTransform = character.transform * character.skeleton.worldTransform[parent];
+          
+          const glm::vec3 jointPos = glm::vec3(transform[3]);
+          const glm::vec3 parentJointPos = glm::vec3(parentTransform[3]);
+          
+          const glm::vec3 boneDirection = jointPos - parentJointPos;
+          const float boneLength = glm::length(boneDirection);
+          
+          const glm::vec2 jointScreen = world_to_screen(scene.userCamera, jointPos);
+          const glm::vec2 parentScreen = world_to_screen(scene.userCamera, parentJointPos);
+          
+          const glm::vec3 midpoint = (jointPos + parentJointPos) * 0.5f;
+          const glm::vec2 midpointScreen = world_to_screen(scene.userCamera, midpoint);
+          
+          drawList->AddLine(
+              ImVec2(parentScreen.x, parentScreen.y), 
+              ImVec2(jointScreen.x, jointScreen.y), 
+              boneColor, 
+              2.5f
+          );
+          
+          const float axisScale = boneLength * 0.15f; 
+          
+          glm::vec3 xAxis = glm::normalize(glm::vec3(transform[0])) * axisScale;
+          glm::vec3 yAxis = glm::normalize(glm::vec3(transform[1])) * axisScale;
+          glm::vec3 zAxis = glm::normalize(glm::vec3(transform[2])) * axisScale;
+          
+          glm::vec2 xAxisScreen = world_to_screen(scene.userCamera, jointPos + xAxis);
+          glm::vec2 yAxisScreen = world_to_screen(scene.userCamera, jointPos + yAxis);
+          glm::vec2 zAxisScreen = world_to_screen(scene.userCamera, jointPos + zAxis);
+          
+		  // Draw joint and axis
+          drawList->AddCircleFilled(
+              ImVec2(jointScreen.x, jointScreen.y), 
+              4.0f, 
+              boneColor
+          );
+          
+          drawList->AddLine(
+              ImVec2(jointScreen.x, jointScreen.y), 
+              ImVec2(xAxisScreen.x, xAxisScreen.y), 
+              xAxisColor, 
+              1.5f
+          );
+          
+          drawList->AddLine(
+              ImVec2(jointScreen.x, jointScreen.y), 
+              ImVec2(yAxisScreen.x, yAxisScreen.y), 
+              yAxisColor, 
+              1.5f
+          );
+          
+          drawList->AddLine(
+              ImVec2(jointScreen.x, jointScreen.y), 
+              ImVec2(zAxisScreen.x, zAxisScreen.y), 
+              zAxisColor, 
+              1.5f
+          );
+          
+          const float arrowSize = 4.0f;
+          const glm::vec2 boneDir = glm::normalize(jointScreen - parentScreen);
+          const glm::vec2 perpDir(-boneDir.y, boneDir.x);
+          
+          const glm::vec2 arrowBase = jointScreen - boneDir * arrowSize * 2.0f;
+          const glm::vec2 arrowLeft = arrowBase - boneDir * arrowSize + perpDir * arrowSize;
+          const glm::vec2 arrowRight = arrowBase - boneDir * arrowSize - perpDir * arrowSize;
+          
+          drawList->AddTriangleFilled(
+              ImVec2(jointScreen.x, jointScreen.y),
+              ImVec2(arrowLeft.x, arrowLeft.y),
+              ImVec2(arrowRight.x, arrowRight.y),
+              IM_COL32(80, 200, 120, 230) // Emerald Green
+              //IM_COL32(34, 139, 34, 230) //Forest Green
+              //IM_COL32(152, 255, 152, 230) //Mint Green
+              //IM_COL32(0, 128, 128, 230) //Teal Green
+          );
+        }
+        else
+        {
+          // Root node visualization
+          const glm::vec3 rootPos = glm::vec3(transform[3]);
+          const glm::vec2 rootScreen = world_to_screen(scene.userCamera, rootPos);
+          
+          drawList->AddCircleFilled(
+              ImVec2(rootScreen.x, rootScreen.y), 
+              6.0f, 
+              IM_COL32(255, 255, 0, 200) //yellow for root
+          );
+          
+		  // Draw root axis
+          const float rootAxisScale = 0.1f;
+          glm::vec3 xAxis = glm::normalize(glm::vec3(transform[0])) * rootAxisScale;
+          glm::vec3 yAxis = glm::normalize(glm::vec3(transform[1])) * rootAxisScale;
+          glm::vec3 zAxis = glm::normalize(glm::vec3(transform[2])) * rootAxisScale;
+          
+          glm::vec2 xAxisScreen = world_to_screen(scene.userCamera, rootPos + xAxis);
+          glm::vec2 yAxisScreen = world_to_screen(scene.userCamera, rootPos + yAxis);
+          glm::vec2 zAxisScreen = world_to_screen(scene.userCamera, rootPos + zAxis);
+          
+          drawList->AddLine(
+              ImVec2(rootScreen.x, rootScreen.y), 
+              ImVec2(xAxisScreen.x, xAxisScreen.y), 
+              xAxisColor, 
+              2.0f
+          );
+ 
+          drawList->AddLine(
+              ImVec2(rootScreen.x, rootScreen.y), 
+              ImVec2(yAxisScreen.x, yAxisScreen.y), 
+              yAxisColor, 
+              2.0f
+          );
+          
+          drawList->AddLine(
+              ImVec2(rootScreen.x, rootScreen.y), 
+              ImVec2(zAxisScreen.x, zAxisScreen.y), 
+              zAxisColor, 
+              2.0f
+          );
+        }
+		// Draw selected node indicator
+        if (j == selectedNode)
+        {
+          const glm::vec3 selectedPos = glm::vec3(transform[3]);
+          const glm::vec2 selectedScreen = world_to_screen(scene.userCamera, selectedPos);
+          
+          drawList->AddCircle(
+              ImVec2(selectedScreen.x, selectedScreen.y), 
+              8.0f, 
+              IM_COL32(255, 255, 255, 255), 
+              12, 
+              2.0f
+          );
         }
       }
       ImGui::End();
