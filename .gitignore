@@ -1,6 +1,9 @@
+build
 Builds
 resources
 .vscode
 .vs
 Tools
 sources/3rd_party
+assimp.dll
+notes.txt
