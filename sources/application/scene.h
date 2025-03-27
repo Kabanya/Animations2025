@@ -4,6 +4,7 @@
 #include "engine/import/model.h"
 #include "user_camera.h"
 #include "character.h"
+#include "physics_world.h"
 
 struct Scene
 {
@@ -13,4 +14,6 @@ struct Scene
   UserCamera userCamera;
 
   std::vector<Character> characters;
+
+  std::unique_ptr<PhysicsWorld> physicsWorld;
 };

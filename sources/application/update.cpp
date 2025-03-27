@@ -6,6 +6,9 @@
 
 void application_update(Scene &scene)
 {
+  if (scene.physicsWorld)
+    scene.physicsWorld->update_physics(engine::get_delta_time());
+
   arcball_camera_update(
     scene.userCamera.arcballCamera,
     scene.userCamera.transform,

@@ -246,6 +246,35 @@ static void show_models(Scene &scene)
   ImGui::End();
 }
 
+static void show_physics(Scene &scene)
+{
+  if (ImGui::Begin("Phisics"))
+  {
+    if (!scene.physicsWorld)
+    {
+      if (ImGui::Button("Create Physics World"))
+      {
+        scene.physicsWorld = std::make_unique<PhysicsWorld>();
+      }
+    }
+    else
+    {
+      glm::mat4 worldToScreen = scene.userCamera.projection * inverse(scene.userCamera.transform);
+      scene.physicsWorld->debug_render(worldToScreen, vec3(scene.userCamera.transform[3]));
+      if (ImGui::Button("Create Ragdoll"))
+      {
+        auto r = scene.physicsWorld->create_ragdoll(0);
+        r->AddToPhysicsSystem(JPH::EActivation::Activate);
+      }
+      if (ImGui::Button("Destroy Physics World"))
+      {
+        scene.physicsWorld.reset();
+      }
+    }
+  }
+  ImGui::End();
+}
+
 void application_imgui_render(Scene &scene)
 {
   render_imguizmo(mCurrentGizmoOperation, mCurrentGizmoMode);
@@ -253,4 +282,5 @@ void application_imgui_render(Scene &scene)
   show_info();
   show_characters(scene);
   show_models(scene);
+  show_physics(scene);
 }

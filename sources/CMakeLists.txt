@@ -80,10 +80,14 @@ SET(ozz_build_postfix OFF CACHE BOOL "" FORCE)
 add_subdirectory(3rd_party/ozz)
 include_directories(3rd_party/ozz/include)
 
+add_subdirectory(3rd_party/Jolt)
+
 set(ADDITIONAL_LIBS ${ADDITIONAL_LIBS}
   ozz_geometry
   ozz_animation_offline
-  ozz_options)
+  ozz_options
+  Jolt::Jolt)
+
 
 set(EXE_SOURCES ${EXE_SOURCES} ${SRC_ROOT}/3rd_party/glad/glad.c)
 

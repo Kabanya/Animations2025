@@ -5,6 +5,6 @@
 struct UserCamera
 {
   glm::mat4 transform;
-  mat4x4 projection;
+  glm::mat4x4 projection;
   ArcballCamera arcballCamera;
 };
