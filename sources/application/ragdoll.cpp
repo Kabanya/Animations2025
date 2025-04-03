@@ -7,91 +7,128 @@
 #include <Jolt/Physics/Constraints/ConeConstraint.h>
 #include <Jolt/Physics/Constraints/SwingTwistConstraint.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
+#include <Jolt/Physics/Collision/Shape/RotatedTranslatedShape.h>
+#include "import/model.h"
+#include <ozz/animation/runtime/local_to_model_job.h>
+#include <ozz/animation/runtime/skeleton_utils.h>
+#include <ozz/base/maths/simd_math.h>
 
-JPH::Ref<JPH::RagdollSettings> create_ragdoll_settings()
+static JPH::Ref<JPH::Shape> create_capsule_shape(float half_height, float radius, JPH::Vec3Arg offset, JPH::Vec3Arg euler)
 {
+	JPH::CapsuleShape *capsule = new JPH::CapsuleShape(half_height, radius);
+	capsule->SetDensity(1.0f); // Density of human body is arond of 1000 kg/m^3
+	JPH::Quat euler_quat = JPH::Quat::sEulerAngles(euler);
+	JPH::Vec3 rotatedOffset = euler_quat * offset;
+	JPH::Ref<JPH::Shape> shape = capsule;
+	return new JPH::RotatedTranslatedShape(rotatedOffset, euler_quat, shape.GetPtr());
+}
+
+static JPH::Ref<JPH::Shape> create_capsule_limb(float half_height, float radius, JPH::Vec3Arg euler)
+{
+	return create_capsule_shape(half_height, radius, JPH::Vec3(0, half_height + radius, 0), euler);
+}
+
+static JPH::Ref<JPH::Shape> create_capsule_body(float half_height, float radius, JPH::Vec3Arg euler)
+{
+	return create_capsule_shape(half_height, radius, JPH::Vec3(0, 0, 0), euler);
+}
+
+JPH::Ref<JPH::RagdollSettings> create_ragdoll_settings(const SkeletonPtr &skeleton_src)
+{
+  std::vector<ozz::math::Float4x4> transforms;
+	{
+		transforms.resize(skeleton_src->num_joints());
+		ozz::animation::LocalToModelJob localToModelJob;
+		localToModelJob.skeleton = skeleton_src.get();
+		localToModelJob.input = skeleton_src->joint_rest_poses();
+		localToModelJob.output = ozz::make_span(transforms);
+		assert(localToModelJob.Validate());
+		const bool success = localToModelJob.Run();
+		assert(success);
+	}
+	const int JOINT_COUNT = 13;
+	const char *jointNames[JOINT_COUNT] = {
+		"Hips",
+		"Spine",
+		"Spine1",
+		"Spine2",
+		"Neck",
+		"LeftArm",
+		"RightArm",
+		"LeftForeArm",
+		"RightForeArm",
+		"LeftUpLeg",
+		"RightUpLeg",
+		"LeftLeg",
+		"RightLeg"
+	};
+	int jointParents[JOINT_COUNT] = {
+		-1, // Hips
+		0, // Spine -> Hips
+		1, // Spine1 -> Spine
+		2, // Spine2 -> Spine1
+		3, // Head -> Spine2
+		3, // LeftArm -> Spine2
+		3, // RightArm -> Spine2
+		5, // LeftForeArm -> LeftArm
+		6, // RightForeArm -> RightArm
+		0, // LeftUpLeg -> Hips
+		0, // RightUpLeg -> Hips
+		9, // LeftLeg -> LeftUpLeg
+		10, // RightLeg -> RightUpLeg
+	};
+	int jointIndices[JOINT_COUNT];
+	for (int i = 0; i < JOINT_COUNT; i++)
+	{
+		jointIndices[i] = ozz::animation::FindJoint(*skeleton_src, jointNames[i]);
+		assert(jointIndices[i] != -1);
+	}
 	// Create skeleton
 	JPH::Ref<JPH::Skeleton> skeleton = new JPH::Skeleton;
-	JPH::uint lower_body = skeleton->AddJoint("LowerBody");
-	JPH::uint mid_body = skeleton->AddJoint("MidBody", lower_body);
-	JPH::uint upper_body = skeleton->AddJoint("UpperBody", mid_body);
-	/*JPH::uint head =*/ skeleton->AddJoint("Head", upper_body);
-	JPH::uint upper_arm_l = skeleton->AddJoint("UpperArmL", upper_body);
-	JPH::uint upper_arm_r = skeleton->AddJoint("UpperArmR", upper_body);
-	/*JPH::uint lower_arm_l =*/ skeleton->AddJoint("LowerArmL", upper_arm_l);
-	/*JPH::uint lower_arm_r =*/ skeleton->AddJoint("LowerArmR", upper_arm_r);
-	JPH::uint upper_leg_l = skeleton->AddJoint("UpperLegL", lower_body);
-	JPH::uint upper_leg_r = skeleton->AddJoint("UpperLegR", lower_body);
-	/*JPH::uint lower_leg_l =*/ skeleton->AddJoint("LowerLegL", upper_leg_l);
-	/*JPH::uint lower_leg_r =*/ skeleton->AddJoint("LowerLegR", upper_leg_r);
+	for (int i = 0; i < JOINT_COUNT; i++)
+	{
+		skeleton->AddJoint(jointNames[i], jointParents[i]);
+	}
+
+	ozz::math::SimdFloat4 nodeTranslations[JOINT_COUNT];
+	ozz::math::SimdFloat4 nodeRotations[JOINT_COUNT];
+	for (int i = 0; i < JOINT_COUNT; i++)
+	{
+		ozz::math::SimdFloat4 unusedScale;
+		const bool decomposed = ToAffine(transforms[jointIndices[i]], nodeTranslations + i, nodeRotations + i, &unusedScale);
+		assert(decomposed);
+	}
 
 	// Create shapes for limbs
-	JPH::Ref<JPH::Shape> shapes[] = {
-		new JPH::CapsuleShape(0.15f, 0.10f),		// Lower Body
-		new JPH::CapsuleShape(0.15f, 0.10f),		// Mid Body
-		new JPH::CapsuleShape(0.15f, 0.10f),		// Upper Body
-		new JPH::CapsuleShape(0.075f, 0.10f),	// Head
-		new JPH::CapsuleShape(0.15f, 0.06f),		// Upper Arm L
-		new JPH::CapsuleShape(0.15f, 0.06f),		// Upper Arm R
-		new JPH::CapsuleShape(0.15f, 0.05f),		// Lower Arm L
-		new JPH::CapsuleShape(0.15f, 0.05f),		// Lower Arm R
-		new JPH::CapsuleShape(0.2f, 0.075f),		// Upper Leg L
-		new JPH::CapsuleShape(0.2f, 0.075f),		// Upper Leg R
-		new JPH::CapsuleShape(0.2f, 0.06f),		// Lower Leg L
-		new JPH::CapsuleShape(0.2f, 0.06f),		// Lower Leg R
+	const float HALF_PI = JPH::JPH_PI * 0.5f;
+	JPH::Ref<JPH::Shape> shapes[JOINT_COUNT] = {
+		create_capsule_body(0.10f, 0.07f, JPH::Vec3(HALF_PI, 0.f, 0.f)),		// Hips
+		create_capsule_body(0.10f, 0.07f, JPH::Vec3(HALF_PI, 0.f, 0.f)),		// Spine
+		create_capsule_body(0.11f, 0.07f, JPH::Vec3(HALF_PI, 0.f, 0.f)),		// Spine1
+		create_capsule_body(0.12f, 0.07f, JPH::Vec3(HALF_PI, 0.f, 0.f)),		// Spine2
+		create_capsule_limb(0.065f, 0.10f, JPH::Vec3(0.f,  0.f, -HALF_PI)),	  // Head
+		create_capsule_limb(0.11f, 0.06f, JPH::Vec3(0.f,  0.f, -HALF_PI)),		// LeftArm
+		create_capsule_limb(0.11f, 0.06f, JPH::Vec3(0.f,  0.f, HALF_PI)),		// RightArm
+		create_capsule_limb(0.15f, 0.05f, JPH::Vec3(0.f,  0.f, -HALF_PI)),		// LeftForeArm
+		create_capsule_limb(0.15f, 0.05f, JPH::Vec3(0.f,  0.f, HALF_PI)),		// RightForeArm
+		create_capsule_limb(0.16f, 0.075f, JPH::Vec3(0.f,  0.f, HALF_PI)),		// LeftUpLeg
+		create_capsule_limb(0.16f, 0.075f, JPH::Vec3(0.f,  0.f, -HALF_PI)),		// RightUpLeg
+		create_capsule_limb(0.2f, 0.06f, JPH::Vec3(0.f,  0.f, HALF_PI)),		// LeftLeg
+		create_capsule_limb(0.2f, 0.06f, JPH::Vec3(0.f,  0.f, -HALF_PI)),		// RightLeg
 	};
 
-	// Positions of body parts in world space
-	JPH::RVec3 positions[] = {
-		JPH::RVec3(0, 1.15f, 0),					// Lower Body
-		JPH::RVec3(0, 1.35f, 0),					// Mid Body
-		JPH::RVec3(0, 1.55f, 0),					// Upper Body
-		JPH::RVec3(0, 1.825f, 0),				// Head
-		JPH::RVec3(-0.425f, 1.55f, 0),			// Upper Arm L
-		JPH::RVec3(0.425f, 1.55f, 0),			// Upper Arm R
-		JPH::RVec3(-0.8f, 1.55f, 0),				// Lower Arm L
-		JPH::RVec3(0.8f, 1.55f, 0),				// Lower Arm R
-		JPH::RVec3(-0.15f, 0.8f, 0),				// Upper Leg L
-		JPH::RVec3(0.15f, 0.8f, 0),				// Upper Leg R
-		JPH::RVec3(-0.15f, 0.3f, 0),				// Lower Leg L
-		JPH::RVec3(0.15f, 0.3f, 0),				// Lower Leg R
-	};
-
-	// Rotations of body parts in world space
-	JPH::Quat rotations[] = {
-		JPH::Quat::sRotation(JPH::Vec3::sAxisZ(), 0.5f * JPH::JPH_PI),		 // Lower Body
-		JPH::Quat::sRotation(JPH::Vec3::sAxisZ(), 0.5f * JPH::JPH_PI),		 // Mid Body
-		JPH::Quat::sRotation(JPH::Vec3::sAxisZ(), 0.5f * JPH::JPH_PI),		 // Upper Body
-		JPH::Quat::sIdentity(),									 // Head
-		JPH::Quat::sRotation(JPH::Vec3::sAxisZ(), 0.5f * JPH::JPH_PI),		 // Upper Arm L
-		JPH::Quat::sRotation(JPH::Vec3::sAxisZ(), 0.5f * JPH::JPH_PI),		 // Upper Arm R
-		JPH::Quat::sRotation(JPH::Vec3::sAxisZ(), 0.5f * JPH::JPH_PI),		 // Lower Arm L
-		JPH::Quat::sRotation(JPH::Vec3::sAxisZ(), 0.5f * JPH::JPH_PI),		 // Lower Arm R
-		JPH::Quat::sIdentity(),									 // Upper Leg L
-		JPH::Quat::sIdentity(),									 // Upper Leg R
-		JPH::Quat::sIdentity(),									 // Lower Leg L
-		JPH::Quat::sIdentity()									 // Lower Leg R
-	};
-
-	// World space constraint positions
-	JPH::RVec3 constraint_positions[] = {
-		JPH::RVec3::sZero(),				// Lower Body (unused, there's no parent)
-		JPH::RVec3(0, 1.25f, 0),			// Mid Body
-		JPH::RVec3(0, 1.45f, 0),			// Upper Body
-		JPH::RVec3(0, 1.65f, 0),			// Head
-		JPH::RVec3(-0.225f, 1.55f, 0),	// Upper Arm L
-		JPH::RVec3(0.225f, 1.55f, 0),	// Upper Arm R
-		JPH::RVec3(-0.65f, 1.55f, 0),	// Lower Arm L
-		JPH::RVec3(0.65f, 1.55f, 0),		// Lower Arm R
-		JPH::RVec3(-0.15f, 1.05f, 0),	// Upper Leg L
-		JPH::RVec3(0.15f, 1.05f, 0),		// Upper Leg R
-		JPH::RVec3(-0.15f, 0.55f, 0),	// Lower Leg L
-		JPH::RVec3(0.15f, 0.55f, 0),		// Lower Leg R
-	};
+	JPH::RVec3 constraint_positions[JOINT_COUNT];
+	for (int i = 0; i < JOINT_COUNT; i++)
+	{
+		alignas(16) float position[3];
+		ozz::math::Store3Ptr(nodeTranslations[i], position);
+		constraint_positions[i] = JPH::RVec3(position[0], position[1], position[2]);
+	}
 
 	// World space twist axis directions
-	JPH::Vec3 twist_axis[] = {
+	JPH::Vec3 twist_axis[JOINT_COUNT] = {
 		JPH::Vec3::sZero(),				// Lower Body (unused, there's no parent)
+		JPH::Vec3::sAxisY(),				// Mid Body
 		JPH::Vec3::sAxisY(),				// Mid Body
 		JPH::Vec3::sAxisY(),				// Upper Body
 		JPH::Vec3::sAxisY(),				// Head
@@ -106,8 +143,9 @@ JPH::Ref<JPH::RagdollSettings> create_ragdoll_settings()
 	};
 
 	// Constraint limits
-	float twist_angle[] = {
+	float twist_angle[JOINT_COUNT] = {
 		0.0f,		// Lower Body (unused, there's no parent)
+		5.0f,		// Mid Body
 		5.0f,		// Mid Body
 		5.0f,		// Upper Body
 		90.0f,		// Head
@@ -121,9 +159,10 @@ JPH::Ref<JPH::RagdollSettings> create_ragdoll_settings()
 		45.0f,		// Lower Leg R
 	};
 
-	float normal_angle[] = {
+	float normal_angle[JOINT_COUNT] = {
 		0.0f,		// Lower Body (unused, there's no parent)
 		10.0f,		// Mid Body
+		10.0f,		// Upper Body
 		10.0f,		// Upper Body
 		45.0f,		// Head
 		90.0f,		// Upper Arm L
@@ -136,9 +175,10 @@ JPH::Ref<JPH::RagdollSettings> create_ragdoll_settings()
 		0.0f,		// Lower Leg R
 	};
 
-	float plane_angle[] = {
+	float plane_angle[JOINT_COUNT] = {
 		0.0f,		// Lower Body (unused, there's no parent)
 		10.0f,		// Mid Body
+		10.0f,		// Upper Body
 		10.0f,		// Upper Body
 		45.0f,		// Head
 		45.0f,		// Upper Arm L
@@ -159,8 +199,13 @@ JPH::Ref<JPH::RagdollSettings> create_ragdoll_settings()
 	{
 		JPH::RagdollSettings::Part &part = settings->mParts[p];
 		part.SetShape(shapes[p]);
-		part.mPosition = positions[p];
-		part.mRotation = rotations[p];
+
+		alignas(16) float position[3];
+		alignas(16) float rotation[4];
+		ozz::math::Store3Ptr(nodeTranslations[p], position);
+		ozz::math::StorePtr(nodeRotations[p], rotation);
+		part.mPosition = JPH::RVec3(position[0], position[1], position[2]);
+		part.mRotation = JPH::Quat(rotation[0], rotation[1], rotation[2], rotation[3]);
 		part.mMotionType = JPH::EMotionType::Dynamic;
 		part.mObjectLayer = sObjectLayer;
 

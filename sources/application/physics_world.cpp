@@ -38,6 +38,7 @@ public:
     glm::vec2 to = world_to_screen(mWorldToScreen, to_vec3(inTo), mDisplaySize);
 
     ImDrawList *drawList = ImGui::GetForegroundDrawList();
+    inColor.a /= 2;
     drawList->AddLine(ImVec2(from.x, from.y), ImVec2(to.x, to.y), inColor.GetUInt32());
   }
 
@@ -48,6 +49,7 @@ public:
     glm::vec2 v3 = world_to_screen(mWorldToScreen, to_vec3(inV3), mDisplaySize);
 
     ImDrawList *drawList = ImGui::GetForegroundDrawList();
+    inColor.a /= 2;
     drawList->AddTriangle(ImVec2(v1.x, v1.y), ImVec2(v2.x, v2.y), ImVec2(v3.x, v3.y), inColor.GetUInt32());
 
   }
@@ -56,6 +58,7 @@ public:
   {
     glm::vec2 position = world_to_screen(mWorldToScreen, to_vec3(inPosition), mDisplaySize);
     ImDrawList *drawList = ImGui::GetForegroundDrawList();
+    inColor.a /= 2;
     drawList->AddText(/* nullptr, inHeight, */ImVec2(position.x, position.y), inColor.GetUInt32(), inString.data());
   }
 };
@@ -74,7 +77,6 @@ public:
   }
 };
 
-JPH::Ref<JPH::RagdollSettings> create_ragdoll_settings();
 
 static StubBroadPhaseLayer sStubBroadPhaseLayer;
 static JPH::ObjectVsBroadPhaseLayerFilter sObjectVsBroadPhaseLayerFilter;
@@ -82,13 +84,6 @@ static JPH::ObjectLayerPairFilter sObjectLayerPairFilter;
 
 PhysicsWorld::PhysicsWorld()
 {
-  JPH::RegisterDefaultAllocator();
-  JPH::Factory::sInstance = new JPH::Factory();
-  JPH::DebugRenderer::sInstance = new ImGuiDebugRenderer();
-  JPH::RegisterTypes();
-
-  mRagdollSettings = create_ragdoll_settings();
-
   mTempAllocator = std::make_unique<JPH::TempAllocatorImpl>(1024 * 1024);
 
   mJobSystem = std::make_unique<JPH::JobSystemSingleThreaded>(JPH::cMaxPhysicsJobs);
@@ -106,7 +101,7 @@ PhysicsWorld::PhysicsWorld()
     bodyInterface.AddBody(floor->GetID(), JPH::EActivation::DontActivate);
   }
 
-  for (JPH::Vec3 position : {JPH::Vec3(2, 2, 0), JPH::Vec3(-2, 3, 0), JPH::Vec3(-1, 4, 2), JPH::Vec3(0, 5, -1)})
+  for (JPH::Vec3 position : {JPH::Vec3(2, 2, 0), JPH::Vec3(-2, 3, 0), JPH::Vec3(-1, 4, 2)})
   {
     JPH::BodyCreationSettings settings(new JPH::BoxShape(JPH::Vec3(0.5f, 0.5f, 0.5f)), position, JPH::Quat::sIdentity(), JPH::EMotionType::Dynamic, sObjectLayer);
     settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateMassAndInertia;
@@ -114,19 +109,6 @@ PhysicsWorld::PhysicsWorld()
     JPH::Body *cube = bodyInterface.CreateBody(settings);
     bodyInterface.AddBody(cube->GetID(), JPH::EActivation::Activate);
   }
-}
-
-PhysicsWorld::~PhysicsWorld()
-{
-  for (auto &ragdoll : mRagdolls)
-  {
-    ragdoll->RemoveFromPhysicsSystem();
-  }
-  mRagdolls.clear();
-  delete JPH::Factory::sInstance;
-  JPH::Factory::sInstance = nullptr;
-  delete JPH::DebugRenderer::sInstance;
-  JPH::DebugRenderer::sInstance = nullptr;
 }
 
 void PhysicsWorld::update_physics(float dt)
@@ -148,7 +130,22 @@ void PhysicsWorld::debug_render(const glm::mat4 &world_to_screen, glm::vec3 came
   renderer->mDisplaySize = glm::vec2(io.DisplaySize.x, io.DisplaySize.y);
   renderer->SetCameraPos(JPH::Vec3(camera_position.x, camera_position.y, camera_position.z));
   mPhysicsSystem.DrawBodies(JPH::BodyManager::DrawSettings(), JPH::DebugRenderer::sInstance);
-  // mPhysicsSystem.DrawConstraints(JPH::DebugRenderer::sInstance);
-  // mPhysicsSystem.DrawConstraintLimits(JPH::DebugRenderer::sInstance);
+  mPhysicsSystem.DrawConstraints(JPH::DebugRenderer::sInstance);
+  mPhysicsSystem.DrawConstraintLimits(JPH::DebugRenderer::sInstance);
 }
 
+void init_phys_globals()
+{
+  JPH::RegisterDefaultAllocator();
+  JPH::Factory::sInstance = new JPH::Factory();
+  JPH::DebugRenderer::sInstance = new ImGuiDebugRenderer();
+  JPH::RegisterTypes();
+}
+
+void destroy_phys_globals()
+{
+  delete JPH::Factory::sInstance;
+  JPH::Factory::sInstance = nullptr;
+  delete JPH::DebugRenderer::sInstance;
+  JPH::DebugRenderer::sInstance = nullptr;
+}

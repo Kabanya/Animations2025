@@ -16,4 +16,10 @@ struct Scene
   std::vector<Character> characters;
 
   std::unique_ptr<PhysicsWorld> physicsWorld;
+  ~Scene()
+  {
+    characters.clear();
+    physicsWorld.reset();
+    destroy_phys_globals();
+  }
 };

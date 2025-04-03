@@ -47,6 +47,7 @@ static void show_characters(Scene &scene)
   // implement showing characters when only one character can be selected
   static uint32_t selectedCharacter = -1u;
   static uint32_t selectedNode = -1u;
+  static bool dragRagdoll = false;
   if (ImGui::Begin("Scene"))
   {
     for (size_t i = 0; i < scene.characters.size(); i++)
@@ -78,6 +79,7 @@ static void show_characters(Scene &scene)
           character.state = (AnimationState)currentState;
           // set the state of the AnimationGraph controller
         }
+        ImGui::Checkbox("DragRagdoll", &dragRagdoll);
         const float INDENT = 15.0f;
         ImGui::Indent(INDENT);
         ImGui::Text("Meshes: %zu", character.meshes.size());
@@ -103,7 +105,11 @@ static void show_characters(Scene &scene)
     if (selectedCharacter < scene.characters.size())
     {
       Character &character = scene.characters[selectedCharacter];
-      if (selectedNode < character.skeletonInfo.names.size())
+      if (dragRagdoll)
+      {
+        manipulate_transform(character.ragdollTargetTransform, scene.userCamera);
+      }
+      else if (selectedNode < character.skeletonInfo.names.size())
       {
         glm::mat4 &worldTransform = reinterpret_cast<glm::mat4 &>(character.animationContext.worldTransforms[selectedNode]);
         glm::mat4 transform = character.transform * worldTransform;
@@ -259,15 +265,49 @@ static void show_physics(Scene &scene)
     }
     else
     {
-      glm::mat4 worldToScreen = scene.userCamera.projection * inverse(scene.userCamera.transform);
-      scene.physicsWorld->debug_render(worldToScreen, vec3(scene.userCamera.transform[3]));
+      static bool drawPhysics = true;
+      ImGui::Checkbox("Drag Debug Physics", &drawPhysics);
+      if (drawPhysics)
+      {
+        glm::mat4 worldToScreen = scene.userCamera.projection * inverse(scene.userCamera.transform);
+        scene.physicsWorld->debug_render(worldToScreen, vec3(scene.userCamera.transform[3]));
+      }
       if (ImGui::Button("Create Ragdoll"))
       {
-        auto r = scene.physicsWorld->create_ragdoll(0);
-        r->AddToPhysicsSystem(JPH::EActivation::Activate);
+        for (size_t i = 0; i < scene.characters.size(); i++)
+        {
+          Character &character = scene.characters[i];
+          if (!character.ragdollSettings)
+            continue;
+          if (character.ragdoll)
+          {
+            character.ragdoll->RemoveFromPhysicsSystem();
+            character.ragdoll = nullptr;
+          }
+          character.ragdoll = scene.physicsWorld->create_ragdoll(character.ragdollSettings);
+          character.ragdoll->AddToPhysicsSystem(JPH::EActivation::Activate);
+          // character.ragdoll->AddToPhysicsSystem(JPH::EActivation::DontActivate);
+        }
+      }
+
+      for (size_t i = 0; i < scene.characters.size(); i++)
+      {
+        Character &character = scene.characters[i];
+        if (character.ragdoll)
+        {
+          ImGui::SliderFloat("ragdollToAnimationDeltaTime", &character.ragdollToAnimationDeltaTime, 1.f / 60.f, 1.5f);
+        }
       }
       if (ImGui::Button("Destroy Physics World"))
       {
+        for (size_t i = 0; i < scene.characters.size(); i++)
+        {
+          Character &character = scene.characters[i];
+          if (character.ragdoll)
+          {
+            character.ragdoll = nullptr;
+          }
+        }
         scene.physicsWorld.reset();
       }
     }

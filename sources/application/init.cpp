@@ -1,5 +1,7 @@
 #include "scene.h"
 
+JPH::Ref<JPH::RagdollSettings> create_ragdoll_settings(const SkeletonPtr &skeleton_src);
+
 static glm::mat4 get_projective_matrix()
 {
   const float fovY = 90.f * DegToRad;
@@ -10,6 +12,7 @@ static glm::mat4 get_projective_matrix()
 
 void application_init(Scene &scene)
 {
+  init_phys_globals();
   scene.light.lightDirection = glm::normalize(glm::vec3(-1, -1, 0));
   scene.light.lightColor = glm::vec3(1.f);
   scene.light.ambient = glm::vec3(0.2f);
@@ -67,7 +70,8 @@ void application_init(Scene &scene)
     character.meshes = motusMan.meshes;
     character.material = std::move(material);
     character.skeletonInfo = SkeletonInfo(motusMan.skeleton);
-    character.animationContext.setup(MOB1_Walk_F_Loop_IPC.skeleton.skeleton.get());
+    character.ragdollSettings = create_ragdoll_settings(motusMan.skeleton.skeleton);
+    character.animationContext.setup(motusMan.skeleton.skeleton.get());
     std::vector<AnimationNode1D> movementAnimations = {
       {MOB1_Walk_F_Loop_IPC.animations[0].get(), 1.f},
       {MOB1_Jog_F_Loop_IPC.animations[0].get(), 2.f},

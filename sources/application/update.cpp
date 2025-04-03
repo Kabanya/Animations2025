@@ -104,5 +104,67 @@ void application_update(Scene &scene)
     assert(localToModelJob.Validate());
     const bool success = localToModelJob.Run();
     assert(success);
+
+    if (character.ragdoll)
+    {
+      const auto &joints = character.ragdoll->GetRagdollSettings()->GetSkeleton()->GetJoints();
+      assert(character.ragdoll->GetBodyCount() == joints.size());
+
+      JPH::Array<JPH::Mat44> animtedPose(joints.size());
+      for (size_t jointIdx = 0; jointIdx < joints.size(); jointIdx++)
+      {
+        const auto &joint = joints[jointIdx];
+        auto it = character.skeletonInfo.nodesMap.find(joint.mName.c_str());
+        if (it == character.skeletonInfo.nodesMap.end())
+          continue;
+        int nodeIdx = it->second;
+        ozz::math::Float4x4 &worldTransform = animationContext.worldTransforms[nodeIdx];
+        memcpy(&animtedPose[jointIdx], &worldTransform, sizeof(JPH::Mat44));
+      }
+
+      character.ragdoll->DriveToPoseUsingKinematics(JPH::Vec3::sZero(), animtedPose.data(), character.ragdollToAnimationDeltaTime);
+
+      // JPH::SkeletonPose pose;
+      // pose.SetSkeleton(character.ragdoll->GetRagdollSettings()->GetSkeleton());
+      // pose.GetJointMatrices() = animtedPose;
+      // pose.CalculateJointStates();
+      // character.ragdoll->DriveToPoseUsingMotors(pose);
+
+      std::vector<JPH::Mat44> outPose(joints.size());
+      JPH::RVec3 rootOffset;
+      character.ragdoll->GetPose(rootOffset, outPose.data(), true);
+
+      if (true)
+      {
+        const JPH::BodyID headId = character.ragdoll->GetBodyID(4); // head
+        JPH::BodyInterface &bodyInterface = scene.physicsWorld->mPhysicsSystem.GetBodyInterface();
+        const auto currentRotation = bodyInterface.GetRotation(headId);
+
+        glm::vec3 targetPosition = character.ragdollTargetTransform[3];
+        const float fixedDeltaTime = 1.f / 60.f;
+        bodyInterface.MoveKinematic(headId, JPH::Vec3(targetPosition.x, targetPosition.y, targetPosition.z), currentRotation, fixedDeltaTime);
+      }
+      for (size_t jointIdx = 0; jointIdx < joints.size(); jointIdx++)
+      {
+        const auto &joint = joints[jointIdx];
+        auto it = character.skeletonInfo.nodesMap.find(joint.mName.c_str());
+        if (it == character.skeletonInfo.nodesMap.end())
+          continue;
+        int nodeIdx = it->second;
+
+        ozz::math::Float4x4 ragdollTransformDeltaOzz;
+        memcpy(&ragdollTransformDeltaOzz, &outPose[jointIdx], sizeof(JPH::Mat44));
+        ozz::math::Float4x4 &worldTransform = animationContext.worldTransforms[nodeIdx];
+        worldTransform = ragdollTransformDeltaOzz;
+        worldTransform.cols[3] = worldTransform.cols[3] + ozz::math::simd_float4::LoadPtrU(rootOffset.mF32);
+
+        localToModelJob.from = nodeIdx;
+        localToModelJob.from_excluded = true;
+        assert(localToModelJob.Validate());
+        const bool success = localToModelJob.Run();
+        assert(success);
+      }
+
+    }
   }
 }

@@ -4,6 +4,9 @@
 #include "engine/render/mesh.h"
 #include <ozz/animation/runtime/sampling_job.h>
 #include <ozz/base/maths/soa_transform.h>
+#include <ozz/animation/runtime/local_to_model_job.h>
+#include <Jolt/Jolt.h>
+#include <Jolt/Physics/Ragdoll/Ragdoll.h>
 #include "animation_controller.h"
 #include "single_animation.h"
 #include "blend_space_1d.h"
@@ -47,6 +50,12 @@ struct AnimationContext
     skeleton = _skeleton;
     worldTransforms.resize(skeleton->num_joints());
     localTransforms.resize(skeleton->num_soa_joints());
+
+
+    ozz::animation::LocalToModelJob localToModelJob;
+    localToModelJob.skeleton = _skeleton;
+    localToModelJob.input = _skeleton->joint_rest_poses();
+    localToModelJob.output = ozz::make_span(worldTransforms);
   }
 
   void add_animation(const ozz::animation::Animation *animation, float progress, float weight = 1.f )
@@ -73,10 +82,14 @@ struct Character
 {
   std::string name;
   glm::mat4 transform;
+  glm::mat4 ragdollTargetTransform = glm::translate(glm::mat4(1.f), glm::vec3(0.f, 2.f, 0.f));
   std::vector<MeshPtr> meshes;
   MaterialPtr material;
   SkeletonInfo skeletonInfo;
   AnimationContext animationContext;
+  JPH::Ref<JPH::RagdollSettings> ragdollSettings;
+  JPH::Ref<JPH::Ragdoll> ragdoll;
+  float ragdollToAnimationDeltaTime = 1.f / 60.f;
 
   std::vector<std::shared_ptr<IAnimationController>> controllers;
   float linearVelocity = 0.f;
@@ -87,4 +100,12 @@ struct Character
   Character &operator=(Character &&) = default;
   Character(const Character &) = delete;
   Character &operator=(const Character &) = delete;
+  ~Character()
+  {
+    if (ragdoll)
+    {
+      ragdoll->RemoveFromPhysicsSystem();
+      ragdoll = nullptr;
+    }
+  }
 };

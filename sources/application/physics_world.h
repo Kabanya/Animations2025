@@ -12,6 +12,10 @@
 constexpr JPH::ObjectLayer sObjectLayer = 0;
 constexpr JPH::CollisionGroup::GroupID sCollisionGroup = 0;
 
+void init_phys_globals();
+
+void destroy_phys_globals();
+
 struct PhysicsWorld
 {
 	std::unique_ptr<JPH::JobSystem> mJobSystem;           // The job system that runs physics jobs
@@ -20,12 +24,8 @@ struct PhysicsWorld
 	JPH::PhysicsSettings mPhysicsSettings;							  // Main physics simulation settings
 	std::unique_ptr<JPH::TempAllocator> mTempAllocator;   // Temporary allocator for physics jobs
 
-	JPH::Ref<JPH::RagdollSettings> mRagdollSettings;
-	std::vector<JPH::Ref<JPH::Ragdoll>> mRagdolls; // Ragdoll
-
 	float mAccumuletedDeltaTime = 0.0f; // Accumulated time since last physics update
 	PhysicsWorld();
-	~PhysicsWorld();
 
 	void update_physics(float dt);
 
@@ -33,10 +33,9 @@ struct PhysicsWorld
 	void debug_render(const glm::mat4 &world_to_screen, glm::vec3 camera_position);
 
 	// return weak reference to the ragdoll
-	JPH::Ragdoll *create_ragdoll(uint64_t inUserData)
+	JPH::Ref<JPH::Ragdoll> create_ragdoll(const JPH::Ref<JPH::RagdollSettings> &settings)
 	{
-		JPH::Ragdoll *ragdoll = mRagdollSettings->CreateRagdoll(sCollisionGroup, inUserData, &mPhysicsSystem);
-		mRagdolls.push_back(JPH::Ref<JPH::Ragdoll>(ragdoll));
+		JPH::Ragdoll *ragdoll = settings->CreateRagdoll(sCollisionGroup, 0, &mPhysicsSystem);
 		return ragdoll;
 	}
 
