@@ -93,6 +93,7 @@ struct Character
 
   std::vector<std::shared_ptr<IAnimationController>> controllers;
   float linearVelocity = 0.f;
+  int selectedAnimation = -1;
   AnimationState state = AnimationState::Idle;
 
   Character() = default;

@@ -5,9 +5,12 @@
 #include "user_camera.h"
 #include "character.h"
 #include "physics_world.h"
+#include "motion_matching/feature_data_base.h"
 
 struct Scene
 {
+  AnimationDataBase animationDataBase;
+  FeatureDataBase featureDataBase;
   std::vector<ModelAsset> models;
   DirectionLight light;
 

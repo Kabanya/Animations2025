@@ -11,6 +11,11 @@ struct SingleAnimation final : IAnimationController
   float progress = 0; // in [0, 1]
   SingleAnimation(const ozz::animation::Animation *_animation) : animation(_animation) {}
 
+  void set_animation(const ozz::animation::Animation *_animation, float _progress = 0.f)
+  {
+    animation = _animation;
+    progress = _progress;
+  }
 
   float duration() const override
   {

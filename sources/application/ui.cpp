@@ -1,11 +1,22 @@
 #include "imgui/imgui.h"
 #include "imgui/ImGuizmo.h"
+#include <filesystem>
 
 #include "scene.h"
 
 static ImGuizmo::OPERATION mCurrentGizmoOperation(ImGuizmo::TRANSLATE);
 static ImGuizmo::MODE mCurrentGizmoMode(ImGuizmo::WORLD);
 
+
+static glm::vec4 to_vec4(Float3 v, float w)
+{
+  return glm::vec4(v.x, v.y, v.z, w);
+}
+
+static ImVec2 to_imvec2(const glm::vec2 &v)
+{
+  return ImVec2(v.x, v.y);
+}
 static void show_info()
 {
   if (ImGui::Begin("Info"))
@@ -47,6 +58,7 @@ static void show_characters(Scene &scene)
   // implement showing characters when only one character can be selected
   static uint32_t selectedCharacter = -1u;
   static uint32_t selectedNode = -1u;
+  static uint32_t selectedAnimation = -1u;
   static bool dragRagdoll = false;
   if (ImGui::Begin("Scene"))
   {
@@ -62,6 +74,7 @@ static void show_characters(Scene &scene)
           scene.userCamera.arcballCamera.targetPosition = vec3(character.transform[3]) + vec3(0, 1, 0);
         }
       }
+
       if (selectedCharacter == i)
       {
         if (ImGui::SliderFloat("linearVelocity", &character.linearVelocity, 0.f, 3.f))
@@ -80,6 +93,21 @@ static void show_characters(Scene &scene)
           // set the state of the AnimationGraph controller
         }
         ImGui::Checkbox("DragRagdoll", &dragRagdoll);
+
+
+        {
+          for (size_t animationIdx = 0; animationIdx < scene.animationDataBase.animations.size(); animationIdx++)
+          {
+            const auto animName = scene.animationDataBase.animations[animationIdx]->name();
+            if (!std::string_view(animName).ends_with("_IPC"))
+              continue;
+            if (ImGui::Selectable(animName, selectedAnimation == animationIdx))
+            {
+              selectedAnimation = animationIdx;
+              character.selectedAnimation = animationIdx;
+            }
+          }
+        }
         const float INDENT = 15.0f;
         ImGui::Indent(INDENT);
         ImGui::Text("Meshes: %zu", character.meshes.size());
@@ -155,7 +183,38 @@ static void show_characters(Scene &scene)
           const glm::vec3 &to = glm::vec3(transform[3]);
           const glm::vec2 fromScreen = world_to_screen(scene.userCamera, from);
           const glm::vec2 toScreen = world_to_screen(scene.userCamera, to);
-          drawList->AddLine(ImVec2(fromScreen.x, fromScreen.y), ImVec2(toScreen.x, toScreen.y), color, 2.f);
+          drawList->AddLine(to_imvec2(fromScreen), to_imvec2(toScreen), color, 2.f);
+        }
+      }
+
+      const float FPS = 30.f;
+      const float velocityMultiplier = 0.1f;
+      for (const auto &controller : character.controllers)
+      {
+        if (const SingleAnimation *singleAnimation = dynamic_cast<SingleAnimation *>(controller.get()))
+        {
+          if (character.selectedAnimation == -1u)
+            continue;
+          int currentFrameIdx = static_cast<int>(singleAnimation->animation->duration() * FPS * singleAnimation->progress);
+          const auto &clip = scene.featureDataBase.clips[character.selectedAnimation];
+          if (currentFrameIdx >= clip.features.size())
+            currentFrameIdx = clip.features.size() - 1;
+          const FrameFeature &feature = clip.features[currentFrameIdx];
+          // drawList->AddCircle
+          const glm::mat4 &transform = character.transform;
+          glm::vec4 leftFootPosition = transform * to_vec4(feature.leftFootPosition, 1.f);
+          glm::vec4 rightFootPosition = transform * to_vec4(feature.rightFootPosition, 1.f);
+          glm::vec4 leftFootVelocity = transform * to_vec4(feature.leftFootVelocity, 0.f);
+          glm::vec4 rightFootVelocity = transform * to_vec4(feature.rightFootVelocity, 0.f);
+
+          const glm::vec2 leftFootPosition0_v2 = world_to_screen(scene.userCamera, leftFootPosition);
+          const glm::vec2 rightFootPosition0_v2 = world_to_screen(scene.userCamera, rightFootPosition);
+          const glm::vec2 leftFootPosition1_v2 = world_to_screen(scene.userCamera, leftFootPosition + leftFootVelocity * velocityMultiplier);
+          const glm::vec2 rightFootPosition1_v2 = world_to_screen(scene.userCamera, rightFootPosition + rightFootVelocity * velocityMultiplier);
+          drawList->AddCircleFilled(to_imvec2(leftFootPosition0_v2), 5.f, IM_COL32(255, 0, 0, 255));
+          drawList->AddCircleFilled(to_imvec2(rightFootPosition0_v2), 5.f, IM_COL32(0, 255, 0, 255));
+          drawList->AddLine(to_imvec2(leftFootPosition0_v2), to_imvec2(leftFootPosition1_v2), color, 2.f);
+          drawList->AddLine(to_imvec2(rightFootPosition0_v2), to_imvec2(rightFootPosition1_v2), color, 2.f);
         }
       }
       ImGui::End();
@@ -200,6 +259,22 @@ static void show_models(Scene &scene)
 {
   if (ImGui::Begin("Models"))
   {
+    if (ImGui::Button("Build Animations"))
+    {
+      std::vector<std::string> paths;
+      for (auto it : std::filesystem::directory_iterator("resources/Animations/IPC"))
+      {
+        paths.push_back(it.path().string());
+      }
+      for (auto it : std::filesystem::directory_iterator("resources/Animations/Root_Motion"))
+      {
+        paths.push_back(it.path().string());
+      }
+      std::string output_path = "resources/Animations/Animations.ozz";
+      build_animations(paths, output_path);
+
+    }
+
     static uint32_t selectedModel = -1u;
     for (size_t i = 0; i < scene.models.size(); i++)
     {

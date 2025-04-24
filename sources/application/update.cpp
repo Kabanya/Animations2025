@@ -24,6 +24,16 @@ void application_update(Scene &scene)
       // check rtti information that the controller is a BlendSpace1D
       // if it is, then cast it to BlendSpace1D and set the parameter
       // to the linear velocity
+      if (SingleAnimation *singleAnimation = dynamic_cast<SingleAnimation *>(controller.get()))
+      {
+        if (character.selectedAnimation == -1u)
+          continue;
+        const auto *newAnimation = scene.animationDataBase.animations[character.selectedAnimation].get();
+        if (singleAnimation->animation == newAnimation)
+          continue;
+
+        singleAnimation->set_animation(newAnimation, 0.f);
+      }
       if (BlendSpace1D *blendSpace = dynamic_cast<BlendSpace1D *>(controller.get()))
       {
         blendSpace->set_parameter(glm::length(character.linearVelocity));

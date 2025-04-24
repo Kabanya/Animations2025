@@ -6,6 +6,7 @@
 #include <assimp/postprocess.h>
 #include "engine/api.h"
 #include "glad/glad.h"
+#include "timer.h"
 
 #include "import/model.h"
 
@@ -98,6 +99,9 @@ MeshPtr create_mesh(const aiMesh *mesh)
 #include <ozz/animation/runtime/skeleton_utils.h>
 #include <ozz/animation/offline/raw_animation.h>
 #include <ozz/animation/offline/animation_builder.h>
+#include <ozz/animation/offline/animation_optimizer.h>
+#include <ozz/base/io/archive.h>
+#include <ozz/base/io/stream.h>
 
 using RawSkeleton = ozz::animation::offline::RawSkeleton;
 using Joint = ozz::animation::offline::RawSkeleton::Joint;
@@ -137,7 +141,7 @@ static void load_skeleton(Joint &joint, SkeletonOffline &skeleton, const aiNode 
   }
 }
 
-AnimationPtr create_animation(const aiAnimation *animation, const SkeletonPtr &skeleton)
+AnimationPtr create_animation(const aiAnimation *animation, const SkeletonPtr &skeleton, ozz::animation::offline::AnimationOptimizer optimizer = ozz::animation::offline::AnimationOptimizer())
 {
   // Creates a RawAnimation.
   ozz::animation::offline::RawAnimation raw_animation;
@@ -240,7 +244,12 @@ AnimationPtr create_animation(const aiAnimation *animation, const SkeletonPtr &s
   // a new runtime animation instance.
   // This operation will fail and return an empty unique_ptr if the RawAnimation
   // isn't valid.
-  AnimationPtr animationPtr = builder(raw_animation);
+  ozz::animation::offline::RawAnimation optimized_animation;
+  optimizer(raw_animation, *skeleton, &optimized_animation);
+
+  AnimationPtr animationPtr = builder(optimized_animation);
+
+  AnimationPtr optimizedAnimation;
 
   engine::log("Animation \"%s\" loaded", animation->mName.C_Str());
 
@@ -249,7 +258,7 @@ AnimationPtr create_animation(const aiAnimation *animation, const SkeletonPtr &s
 
 ModelAsset load_model(const char *path)
 {
-
+  Timer timer;
   Assimp::Importer importer;
   importer.SetPropertyBool(AI_CONFIG_IMPORT_FBX_PRESERVE_PIVOTS, false);
   importer.SetPropertyFloat(AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY, 1.f);
@@ -303,6 +312,88 @@ ModelAsset load_model(const char *path)
     model.animations[i] = create_animation(scene->mAnimations[i], model.skeleton.skeleton);
   }
 
-  engine::log("Model \"%s\" loaded", path);
+  engine::log("Model \"%s\" loaded. %f ms", path, timer.elapsed_ms());
   return model;
+}
+
+void build_animations(const std::vector<std::string> &paths, const std::string &output_path)
+{
+  Timer timer;
+
+  SkeletonPtr skeleton;
+  ozz::io::File output(output_path.c_str(), "wb");
+  ozz::io::OArchive outputArchive(&output);
+
+  for (const std::string &path : paths)
+  {
+    Assimp::Importer importer;
+    importer.SetPropertyBool(AI_CONFIG_IMPORT_FBX_PRESERVE_PIVOTS, false);
+    importer.SetPropertyFloat(AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY, 1.f);
+
+    importer.ReadFile(path,
+      aiPostProcessSteps::aiProcess_LimitBoneWeights |
+      aiPostProcessSteps::aiProcess_GlobalScale);
+
+    const aiScene *scene = importer.GetScene();
+    if (!scene)
+    {
+      continue;
+    }
+
+    if (!skeleton)
+    {
+      SkeletonOffline helperSkeleton;
+      RawSkeleton raw_skeleton;
+      raw_skeleton.roots.resize(1);
+      load_skeleton(raw_skeleton.roots[0], helperSkeleton, *scene->mRootNode, -1, 0);
+      if (!raw_skeleton.Validate())
+      {
+        assert(false);
+      }
+      ozz::animation::offline::SkeletonBuilder builder;
+      skeleton = builder(raw_skeleton);
+      outputArchive << *skeleton;
+    }
+    ozz::animation::offline::AnimationOptimizer defaultOptimizer;
+    AnimationPtr animation = create_animation(scene->mAnimations[0], skeleton, defaultOptimizer);
+
+    outputArchive << *animation;
+  }
+  engine::log("Animation Database \"%s\" built. %f ms", output_path.c_str(), timer.elapsed_ms());
+}
+
+
+AnimationDataBase load_animations(const std::string &path)
+{
+  Timer timer;
+  AnimationDataBase data;
+  data.path = path;
+  ozz::io::File input(path.c_str(), "rb");
+  ozz::io::IArchive archive(&input);
+  if (!input.opened())
+  {
+    engine::error("Failed to read animation file \"%s\"", path.c_str());
+    return data;
+  }
+  if (!archive.TestTag<ozz::animation::Skeleton>())
+  {
+    engine::error("Archive doesn't contain the expected object type.");
+    return data;
+  }
+  data.skeleton = ozz::make_unique<ozz::animation::Skeleton>();
+  archive >> *data.skeleton;
+  while (true)
+  {
+    if (!archive.TestTag<ozz::animation::Animation>())
+    {
+      break;
+    }
+    AnimationPtr animation = ozz::make_unique<ozz::animation::Animation>();
+    archive >> *animation;
+    assert(data.animationMap.find(animation->name()) == data.animationMap.end());
+    data.animationMap[animation->name()] = data.animations.size();
+    data.animations.push_back(std::move(animation));
+  }
+  engine::log("Animation Database \"%s\" loaded. %f ms", path.c_str(), timer.elapsed_ms());
+  return data;
 }

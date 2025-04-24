@@ -26,3 +26,24 @@ struct ModelAsset
 };
 
 ModelAsset load_model(const char *path);
+void build_animations(const std::vector<std::string> &paths, const std::string &output_path);
+
+struct AnimationDataBase
+{
+  std::string path;
+  SkeletonPtr skeleton;
+  std::vector<AnimationPtr> animations;
+  std::map<std::string, int> animationMap;
+
+  const ozz::animation::Animation *find_animation(const std::string &name) const
+  {
+    auto it = animationMap.find(name);
+    if (it != animationMap.end())
+    {
+      return animations[it->second].get();
+    }
+    return nullptr;
+  }
+};
+
+AnimationDataBase load_animations(const std::string &path);
