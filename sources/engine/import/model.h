@@ -10,19 +10,20 @@ using AnimationPtr = ozz::unique_ptr<ozz::animation::Animation>;
 
 struct SkeletonOffline
 {
-	std::vector<std::string> names;
-	std::vector<mat4> localTransform;
-	std::vector<int> parents;
-	std::vector<int> hierarchyDepth; // only for ui
-	SkeletonPtr skeleton_ptr;
+  std::vector<std::string> names;
+  std::vector<mat4> localTransform;
+  std::vector<int> parents;
+  std::vector<int> hierarchyDepth; // only for ui
+  SkeletonPtr skeleton;
 };
 
 struct ModelAsset
 {
-	std::string path;
-	std::vector<MeshPtr> meshes;
-	SkeletonOffline skeleton;
-	std::vector<AnimationPtr> animations;
+  std::string path;
+  std::vector<MeshPtr> meshes;
+  SkeletonOffline skeleton;
+  std::vector<AnimationPtr> animations;
+	std::vector<std::string> animationNames;
 };
 
 ModelAsset load_model(const char* path);

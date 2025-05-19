@@ -230,23 +230,15 @@ AnimationPtr create_animation(const aiAnimation* animation, const SkeletonPtr& s
   //  2. Keyframes' are not sorted in a strict ascending order.
   //  3. Keyframes' are not within [0, duration] range.
   if (!raw_animation.Validate()) {
-    // Instead of asserting (which may be stripped in release builds),
-    // return a null/empty pointer to indicate failure
-    engine::log("Animation validation failed");
-    return {};
+    assert(false);
   }
 
-  // Creates an AnimationBuilder instance.
+  // Creates a AnimationBuilder instance.
   ozz::animation::offline::AnimationBuilder builder;
 
   AnimationPtr animationPtr = builder(raw_animation);
 
-  if (animationPtr) {
-    engine::log("Animation \"%s\" loaded", animation->mName.C_Str());
-  }
-  else {
-    engine::log("Failed to build animation \"%s\"", animation->mName.C_Str());
-  }
+  engine::log("Animation \"%s\" loaded", animation->mName.C_Str());
 
   return animationPtr;
 }
@@ -289,7 +281,7 @@ ModelAsset load_model(const char* path)
   ozz::animation::offline::SkeletonBuilder builder;
 
   SkeletonPtr skeleton = builder(raw_skeleton);
-  model.skeleton.skeleton_ptr = std::move(skeleton);
+  model.skeleton.skeleton = std::move(skeleton);
 
   model.meshes.resize(scene->mNumMeshes);
   for (uint32_t i = 0; i < scene->mNumMeshes; i++)
@@ -298,9 +290,10 @@ ModelAsset load_model(const char* path)
   }
 
   model.animations.resize(scene->mNumAnimations);
-  for (uint32_t i = 0; i < scene->mNumAnimations; i++)
-  {
-    model.animations[i] = create_animation(scene->mAnimations[i], model.skeleton.skeleton_ptr);
+  model.animationNames.resize(scene->mNumAnimations);
+  for (uint32_t i = 0; i < scene->mNumAnimations; i++) {
+    model.animations[i] = create_animation(scene->mAnimations[i], model.skeleton.skeleton);
+    model.animationNames[i] = scene->mAnimations[i]->mName.C_Str();
   }
 
   engine::log("Model \"%s\" loaded", path);

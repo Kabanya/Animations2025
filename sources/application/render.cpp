@@ -28,8 +28,8 @@ void render_character(const Character& character, const mat4& cameraProjView, ve
     skinningMatrixes.resize(mesh->inverseBindPose.size());
     for (size_t i = 0; i < mesh->inverseBindPose.size(); i++)
     {
-      auto it = character.skeletonData.nodesMap.find(mesh->bonesNames[i]);
-      if (it == character.skeletonData.nodesMap.end())
+      auto it = character.skeletonInfo.nodesMap.find(mesh->bonesNames[i]);
+      if (it == character.skeletonInfo.nodesMap.end())
       {
         const std::string& name = mesh->bonesNames[i];
         engine::error("Bone \"%s\" from Mesh \"%s\" not found in skeleton", mesh->name.c_str(), name.c_str());
